@@ -1,8 +1,9 @@
+
 import os
-import asyncio
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
+import asyncio
 
 # Load environment variables from .env file
 load_dotenv()
@@ -184,6 +185,10 @@ async def main() -> None:
     # Run the bot
     await application.run_polling()
 
+# Run the event loop manually
 if __name__ == '__main__':
-    asyncio.run(main())
-
+    loop = asyncio.get_event_loop()
+    try:
+        loop.run_until_complete(main())
+    finally:
+        loop.close()
