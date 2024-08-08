@@ -1,15 +1,14 @@
 import os
 import asyncio
 from dotenv import load_dotenv
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Dice
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
-import random
 
 # Load environment variables from .env file
 load_dotenv()
 
-# Telegram bot token
-TELEGRAM_BOT_TOKEN = os.getenv('7000894405:AAFR_Yi4ljLldytaNPHB4p88NkU2-xLFXeE')
+# Telegram bot token (insert your actual token here directly or use environment variable)
+TELEGRAM_BOT_TOKEN = '7000894405:AAFR_Yi4ljLldytaNPHB4p88NkU2-xLFXeE'
 
 # In-memory user data (use a database for production)
 users = {}
@@ -26,7 +25,7 @@ ROUND_SELECTION = 'round_selection'
 
 # Define your test user ID and balance here
 TEST_USER_ID = 6764153691
-TEST_USER_BALANCE = 50000  # Amount in dollars
+TEST_USER_BALANCE = 2635  # Amount in dollars
 
 # Initialize the user with a specific balance for testing
 users[TEST_USER_ID] = {"balance": TEST_USER_BALANCE, "state": MAIN_MENU}
@@ -165,6 +164,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             if withdraw_amount > users[user_id]["balance"]:
                 await update.message.reply_text("🚫 You don't have enough balance to withdraw this amount.")
                 return
+
             users[user_id]["balance"] -= withdraw_amount
             users[user_id]["state"] = MAIN_MENU
             await update.message.reply_text(f"📤 *You have successfully withdrawn ${withdraw_amount}.*\n💰 *Your new balance is ${users[user_id]['balance']}.*")
@@ -172,74 +172,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await update.message.reply_text("❗️ Please enter a valid amount.")
         return
 
-    if user_state == ROUND_SELECTION:
-        try:
-            rounds = int(user_message)
-            if rounds <= 0 or rounds > 3:
-                await update.message.reply_text("❗️ Number of rounds must be between 1 and 3.")
-                return
-            games[user_id]["rounds"] = rounds
-            users[user_id]["state"] = DICE_GAME
-            await update.message.reply_text("🎲 *You will roll first. Send /roll to roll the dice.*", parse_mode="Markdown")
-        except ValueError:
-            await update.message.reply_text("❗️ Please enter a valid number of rounds.")
-        return
-
-    if user_state == DICE_GAME:
-        if user_message == '/roll':
-            if user_id not in games or games[user_id]["rounds"] <= 0:
-                await update.message.reply_text("❗️ Please start a game first by choosing the number of rounds.")
-                return
-
-            # User rolls the dice
-            user_roll = random.randint(1, 6)
-            games[user_id]["user_score"] += user_roll
-
-            # Bot rolls the dice
-            bot_roll = random.randint(1, 6)
-            games[user_id]["bot_score"] += bot_roll
-
-            # Calculate the results
-            rounds_left = games[user_id]["rounds"] - 1
-            games[user_id]["rounds"] = rounds_left
-
-            # Send the dice roll animation
-            dice_emoji = Dice(emoji="🎲")
-            await update.message.reply_dice(emoji=dice_emoji.emoji)
-
-            if rounds_left > 0:
-                await update.message.reply_text(f"🎲 *You rolled:* {user_roll}\n🤖 *Bot rolled:* {bot_roll}\n\n*Rounds left:* {rounds_left}\n\nSend /roll again to continue.")
-            else:
-                user_score = games[user_id]["user_score"]
-                bot_score = games[user_id]["bot_score"]
-
-                if user_score > bot_score:
-                    result_text = f"🎉 *Congratulations!* You win with a score of {user_score} against the bot's {bot_score}."
-                elif user_score < bot_score:
-                    result_text = f"😢 *You lost.* The bot wins with a score of {bot_score} against your {user_score}."
-                else:
-                    result_text = f"🤝 *It's a tie!* Both you and the bot scored {user_score}."
-
-                del games[user_id]  # End the game
-
-                await update.message.reply_text(result_text, parse_mode="Markdown")
-        return
-
-# Main function to start the bot
+# Main function to run the bot
 async def main() -> None:
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
-    application.add_handler(CommandHandler("start", start))
+    # Register handlers
+    application.add_handler(CommandHandler('start', start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(CallbackQueryHandler(button))
 
-    # Run the bot with the proper event loop management
-    loop = asyncio.get_event_loop()
-    try:
-        await application.run_polling()
-    finally:
-        # Ensure the event loop is properly closed
-        loop.close()
+    # Run the bot
+    await application.run_polling()
 
 if __name__ == '__main__':
     asyncio.run(main())
+
