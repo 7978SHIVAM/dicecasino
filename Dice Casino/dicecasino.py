@@ -64,13 +64,15 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     # Handle user state and callback data
     if query.data == 'balance':
+        users[user_id]["prev_state"] = users[user_id]["state"]
+        users[user_id]["state"] = 'balance'
         balance = users.get(user_id, {}).get("balance", 0)
         keyboard = [[InlineKeyboardButton("⬅️ Back", callback_data='back')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(text=f"💰 *Your current balance is:* _${balance}_", reply_markup=reply_markup, parse_mode="Markdown")
 
     elif query.data == 'dice':
-        users[user_id]["prev_state"] = MAIN_MENU
+        users[user_id]["prev_state"] = users[user_id]["state"]
         users[user_id]["state"] = CHOOSE_OPPONENT
         keyboard = [
             [InlineKeyboardButton("🤖 Play with Bot", callback_data='play_with_bot')],
@@ -81,14 +83,14 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await query.edit_message_text(text="🎲 *How would you like to play?*", reply_markup=reply_markup, parse_mode="Markdown")
 
     elif query.data == 'deposit':
-        users[user_id]["prev_state"] = MAIN_MENU
+        users[user_id]["prev_state"] = users[user_id]["state"]
         users[user_id]["state"] = DEPOSIT
         keyboard = [[InlineKeyboardButton("⬅️ Back", callback_data='back')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(text=f"💸 *Please send the amount you want to deposit.*\n_Your deposit address is:_ `{WALLET_ADDRESS}`", reply_markup=reply_markup, parse_mode="Markdown")
     
     elif query.data == 'withdraw':
-        users[user_id]["prev_state"] = MAIN_MENU
+        users[user_id]["prev_state"] = users[user_id]["state"]
         users[user_id]["state"] = WITHDRAW
         keyboard = [[InlineKeyboardButton("⬅️ Back", callback_data='back')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -113,8 +115,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await start(update, context)  # Go back to the main menu
         else:
             users[user_id]["state"] = prev_state
-            users[user_id]["prev_state"] = MAIN_MENU
-            # Redraw previous state message
+            # Redraw the previous state message
             if prev_state == DEPOSIT:
                 keyboard = [[InlineKeyboardButton("⬅️ Back", callback_data='back')]]
                 reply_markup = InlineKeyboardMarkup(keyboard)
@@ -131,8 +132,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 await query.edit_message_text(text="🎲 *How would you like to play?*", reply_markup=reply_markup, parse_mode="Markdown")
+            elif prev_state == 'balance':
+                await button(update, context)  # Re-show balance
             else:
-                await start(update, context)  # Go back to the main menu
+                await start(update, context)  # Default to main menu if previous state is unknown
 
 # Handler for processing bets, deposits, and withdrawals
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
