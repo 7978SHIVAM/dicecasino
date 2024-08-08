@@ -1,4 +1,3 @@
-
 import os
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -8,8 +7,8 @@ import asyncio
 # Load environment variables from .env file
 load_dotenv()
 
-# Telegram bot token (insert your actual token here directly or use environment variable)
-TELEGRAM_BOT_TOKEN = '7000894405:AAFR_Yi4ljLldytaNPHB4p88NkU2-xLFXeE'
+# Telegram bot token (use environment variable or directly insert token)
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '7000894405:AAFR_Yi4ljLldytaNPHB4p88NkU2-xLFXeE')
 
 # In-memory user data (use a database for production)
 users = {}
@@ -185,10 +184,6 @@ async def main() -> None:
     # Run the bot
     await application.run_polling()
 
-# Run the event loop manually
+# Run the bot using asyncio.run
 if __name__ == '__main__':
-    loop = asyncio.get_event_loop()
-    try:
-        loop.run_until_complete(main())
-    finally:
-        loop.close()
+    asyncio.run(main())
