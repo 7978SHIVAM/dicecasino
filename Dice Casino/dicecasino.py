@@ -9,7 +9,7 @@ import random
 load_dotenv()
 
 # Telegram bot token
-TELEGRAM_BOT_TOKEN = "7000894405:AAF6FS6vQlNE6vmZ1pSFkZw9TgmhYA8AmYw"
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 
 # In-memory user data (use a database for production)
 users = {}
@@ -203,6 +203,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             rounds_left = games[user_id]["rounds"] - 1
             games[user_id]["rounds"] = rounds_left
 
+            # Send the dice roll animation
+            dice_emoji = Dice(emoji="🎲")
+            await update.message.reply_dice(emoji=dice_emoji.emoji)
+
             if rounds_left > 0:
                 await update.message.reply_text(f"🎲 *You rolled:* {user_roll}\n🤖 *Bot rolled:* {bot_roll}\n\n*Rounds left:* {rounds_left}\n\nSend /roll again to continue.")
             else:
@@ -228,6 +232,7 @@ async def main() -> None:
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(CallbackQueryHandler(button))
 
+    # Run the bot with the proper event loop management
     await application.run_polling()
 
 if __name__ == '__main__':
