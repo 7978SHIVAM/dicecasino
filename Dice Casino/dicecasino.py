@@ -1,4 +1,5 @@
 import os
+import asyncio
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
@@ -16,18 +17,25 @@ users = {}
 # Start command handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.message.from_user.id
+    user_first_name = update.message.from_user.first_name  # Get the user's first name
 
     if user_id not in users:
-        users[user_id] = {"balance": 1000}  # Initialize user with a balance of 1000 units
+        users[user_id] = {"balance": 0}  # Initialize user with a balance of 0 units
 
     keyboard = [
-        [InlineKeyboardButton("Check Balance", callback_data='balance')],
-        [InlineKeyboardButton("Play Dice Game", callback_data='dice')],
-        [InlineKeyboardButton("Deposit Crypto", callback_data='deposit')],
-        [InlineKeyboardButton("Withdraw Crypto", callback_data='withdraw')]
+        [InlineKeyboardButton("💰 Check Balance", callback_data='balance')],
+        [InlineKeyboardButton("🎲 Play Dice Game", callback_data='dice')],
+        [InlineKeyboardButton("💸 Deposit Crypto", callback_data='deposit')],
+        [InlineKeyboardButton("📤 Withdraw Crypto", callback_data='withdraw')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text('Welcome to the Casino Bot! What would you like to do?', reply_markup=reply_markup)
+    
+    # Personalized greeting message
+    await update.message.reply_text(
+        f'*Welcome to the Casino Bot, {user_first_name}!*\n\n_What would you like to do?_', 
+        reply_markup=reply_markup, 
+        parse_mode="Markdown"
+    )
 
 # Callback handler for button presses
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -37,18 +45,29 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await query.answer()
 
     if query.data == 'balance':
-        balance = users[user_id]["balance"]
-        await query.edit_message_text(text=f"Your current balance is: {balance} units")
+        balance = users.get(user_id, {}).get("balance", 0)
+        keyboard = [[InlineKeyboardButton("⬅️ Back", callback_data='back')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(text=f"💰 *Your current balance is:* _{balance} units_", reply_markup=reply_markup, parse_mode="Markdown")
 
     elif query.data == 'dice':
-        await query.edit_message_text(text="Please enter the amount you want to bet:")
+        # Ask the user to enter the amount they want to bet
+        keyboard = [[InlineKeyboardButton("⬅️ Back", callback_data='back')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(text="🎲 *Please enter the amount you want to bet:*", reply_markup=reply_markup, parse_mode="Markdown")
 
     elif query.data == 'deposit':
-        # Logic to provide deposit address and monitor transactions
-        await query.edit_message_text(text="Your deposit address is: ``0x3A035f8B7215fEb5c68c74665Fbaf9255681A8FB`` ")
+        keyboard = [[InlineKeyboardButton("⬅️ Back", callback_data='back')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(text="💸 *Please send the amount you want to deposit.*\n_Your deposit address is:_ `0x3A035f8B7215fEb5c68c74665Fbaf9255681A8FB`", reply_markup=reply_markup, parse_mode="Markdown")
     
     elif query.data == 'withdraw':
-        await query.edit_message_text(text="Please enter the amount you want to withdraw:")
+        keyboard = [[InlineKeyboardButton("⬅️ Back", callback_data='back')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(text="📤 *Please enter the amount you want to withdraw:*", reply_markup=reply_markup, parse_mode="Markdown")
+
+    elif query.data == 'back':
+        await start(update, context)  # Go back to the main menu
 
 # Handler for processing bets
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -59,27 +78,65 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text("Please start the bot with /start")
         return
 
-    try:
-        bet_amount = int(user_message)
-    except ValueError:
-        await update.message.reply_text("Please enter a valid number for your bet.")
+    # Handle deposit amounts
+    if user_message.startswith("Deposit:"):
+        try:
+            deposit_amount = float(user_message.replace("Deposit:", "").strip())
+            if deposit_amount <= 0:
+                await update.message.reply_text("❗️ Deposit amount must be greater than zero.")
+                return
+            users[user_id]["balance"] += deposit_amount
+            await update.message.reply_text(f"💸 *You have successfully deposited {deposit_amount} units.*\n💰 *Your new balance is {users[user_id]['balance']} units.*")
+        except ValueError:
+            await update.message.reply_text("❗️ Please enter a valid amount.")
+        return
+
+    # Handle withdrawal amounts
+    if user_message.startswith("Withdraw:"):
+        try:
+            withdraw_amount = float(user_message.replace("Withdraw:", "").strip())
+            if withdraw_amount <= 0:
+                await update.message.reply_text("❗️ Withdrawal amount must be greater than zero.")
+                return
+            if withdraw_amount > users[user_id]["balance"]:
+                await update.message.reply_text("🚫 You don't have enough balance to withdraw this amount.")
+                return
+            users[user_id]["balance"] -= withdraw_amount
+            await update.message.reply_text(f"📤 *You have successfully withdrawn {withdraw_amount} units.*\n💰 *Your new balance is {users[user_id]['balance']} units.*")
+        except ValueError:
+            await update.message.reply_text("❗️ Please enter a valid amount.")
+        return
+
+    # Ensure this handler does not process messages that are not related to dice game bets
+    if not user_message.isdigit():
+        await update.message.reply_text("❗️ Please enter a valid number for your bet.")
+        return
+
+    bet_amount = int(user_message)
+
+    if bet_amount <= 0:
+        await update.message.reply_text("❗️ Bet amount must be greater than zero.")
         return
 
     if bet_amount > users[user_id]["balance"]:
-        await update.message.reply_text("You don't have enough balance to place this bet.")
+        await update.message.reply_text("🚫 You don't have enough balance to place this bet.")
         return
+
+    # Send rolling dice emoji and wait
+    message = await update.message.reply_text("🎲 *Rolling the dice...*")
+    await asyncio.sleep(2)  # Wait for 2 seconds
 
     # Simulate dice roll (1-6)
     roll = random.randint(1, 6)
 
     if roll > 3:
         users[user_id]["balance"] += bet_amount  # Win: double the bet amount
-        result = f"You rolled a {roll}. You win {bet_amount} units! Your new balance is {users[user_id]['balance']} units."
+        result = f"🎉 *You rolled a {roll}!*\n_You win {bet_amount} units!_\n💰 *Your new balance is {users[user_id]['balance']} units.*"
     else:
         users[user_id]["balance"] -= bet_amount  # Lose: subtract the bet amount
-        result = f"You rolled a {roll}. You lose {bet_amount} units. Your new balance is {users[user_id]['balance']} units."
+        result = f"😢 *You rolled a {roll}.*\n_You lose {bet_amount} units._\n💰 *Your new balance is {users[user_id]['balance']} units.*"
 
-    await update.message.reply_text(result)
+    await message.edit_text(result, parse_mode="Markdown")
 
 # Main function to start the bot
 def main() -> None:
