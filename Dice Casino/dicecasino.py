@@ -9,7 +9,7 @@ import random
 load_dotenv()
 
 # Telegram bot token
-TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+TELEGRAM_BOT_TOKEN = os.getenv('7000894405:AAF6FS6vQlNE6vmZ1pSFkZw9TgmhYA8AmYw')
 
 # In-memory user data (use a database for production)
 users = {}
@@ -26,7 +26,7 @@ ROUND_SELECTION = 'round_selection'
 
 # Define your test user ID and balance here
 TEST_USER_ID = 6764153691
-TEST_USER_BALANCE = 2635  # Amount in dollars
+TEST_USER_BALANCE = 50000  # Amount in dollars
 
 # Initialize the user with a specific balance for testing
 users[TEST_USER_ID] = {"balance": TEST_USER_BALANCE, "state": MAIN_MENU}
@@ -225,6 +225,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 await update.message.reply_text(result_text, parse_mode="Markdown")
         return
 
+# Main function to start the bot
 async def main() -> None:
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
@@ -233,7 +234,12 @@ async def main() -> None:
     application.add_handler(CallbackQueryHandler(button))
 
     # Run the bot with the proper event loop management
-    await application.run_polling()
+    loop = asyncio.get_event_loop()
+    try:
+        await application.run_polling()
+    finally:
+        # Ensure the event loop is properly closed
+        loop.close()
 
 if __name__ == '__main__':
     asyncio.run(main())
