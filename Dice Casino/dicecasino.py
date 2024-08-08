@@ -23,8 +23,8 @@ DICE_GAME = 'dice_game'
 CHOOSE_OPPONENT = 'choose_opponent'
 
 # Define your test user ID and balance here
-TEST_USER_ID = 6764153691
-TEST_USER_BALANCE = 2635  # Amount in dollars
+TEST_USER_ID = 6764153691 , 5941458533
+TEST_USER_BALANCE = 26356  # Amount in dollars
 
 # Initialize the user with a specific balance for testing
 users[TEST_USER_ID] = {"balance": TEST_USER_BALANCE, "state": MAIN_MENU}
