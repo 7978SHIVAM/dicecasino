@@ -225,7 +225,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 await update.message.reply_text(result_text, parse_mode="Markdown")
         return
 
-# Main function to start the bot
 async def main() -> None:
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
@@ -237,5 +236,4 @@ async def main() -> None:
     await application.run_polling()
 
 if __name__ == '__main__':
-    # Platform-specific event loop management
-    asyncio.get_event_loop().run_until_complete(main())
+    asyncio.run(main())
