@@ -179,9 +179,3 @@ def main() -> None:
 if __name__ == '__main__':
     main()
 ```
-
-### Explanation:
-- **Sending Only the Dice Emoji**: In the `DICE_GAME` section, the bot now sends only the 🎲 emoji to indicate the dice is rolling.
-- **Animation Simulation**: The bot waits for 2 seconds to simulate the dice rolling animation before sending the result.
-
-Deploy this updated script to your hosting environment to see the changes in action.
