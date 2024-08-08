@@ -1,7 +1,7 @@
 import os
 import asyncio
 from dotenv import load_dotenv
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Dice
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 import random
 
@@ -9,7 +9,7 @@ import random
 load_dotenv()
 
 # Telegram bot token
-TELEGRAM_BOT_TOKEN = "7000894405:AAFR_Yi4ljLldytaNPHB4p88NkU2-xLFXeE"
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 
 # In-memory user data (use a database for production)
 users = {}
@@ -104,10 +104,19 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await start(update, context)  # Go back to the main menu
 
     elif query.data == 'back':
-        previous_state = users[user_id]["state"]
-        if previous_state == DICE_GAME:
+        current_state = users[user_id]["state"]
+        if current_state == DEPOSIT or current_state == WITHDRAW:
+            users[user_id]["state"] = MAIN_MENU
+            await start(update, context)  # Go back to the main menu
+        elif current_state == DICE_GAME:
             users[user_id]["state"] = CHOOSE_OPPONENT
-            await button(update, context)  # Re-show the choice of opponent
+            keyboard = [
+                [InlineKeyboardButton("🤖 Play with Bot", callback_data='play_with_bot')],
+                [InlineKeyboardButton("👤 Play with Another User", callback_data='play_with_user')],
+                [InlineKeyboardButton("🚫 Cancel", callback_data='cancel')]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(text="🎲 *How would you like to play?*", reply_markup=reply_markup, parse_mode="Markdown")
         else:
             users[user_id]["state"] = MAIN_MENU
             await start(update, context)  # Go back to the main menu
