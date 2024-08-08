@@ -25,7 +25,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await query.answer()
 
     if query.data == 'deposit':
-        await query.edit_message_text(text="Your wallet address is: 0xYourWalletAddress")
+        await query.edit_message_text(text="HVGR FINAL BOSS")
         # Add logic to check for deposits and update the balance here
     elif query.data == 'dice':
         result = "You rolled a 6!"  # Example result
