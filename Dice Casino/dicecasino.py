@@ -1,19 +1,24 @@
 import os
 import asyncio
+import logging
 from dotenv import load_dotenv
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Dice
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 import random
+import sqlite3
+from typing import Optional
 
 # Load environment variables from .env file
 load_dotenv()
 
-# Telegram bot token
+# Constants
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+DATABASE_FILE = 'users.db'
+WALLET_ADDRESS = os.getenv('WALLET_ADDRESS', "0x3A035f8B7215fEb5c68c74665Fbaf9255681A8FB")
 
-# In-memory user data (use a database for production)
-users = {}
-games = {}  # Track ongoing games
+# Logging setup
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Constants for user state
 MAIN_MENU = 'main_menu'
@@ -22,23 +27,62 @@ WITHDRAW = 'withdraw'
 DICE_GAME = 'dice_game'
 CHOOSE_OPPONENT = 'choose_opponent'
 
-# Define your test user ID and balance here
-TEST_USER_ID = 6764153691
-TEST_USER_BALANCE = 2635  # Amount in dollars
+class User:
+    def __init__(self, user_id: int, balance: float, state: str, prev_state: Optional[str] = MAIN_MENU):
+        self.user_id = user_id
+        self.balance = balance
+        self.state = state
+        self.prev_state = prev_state
 
-# Initialize the user with a specific balance for testing
-users[TEST_USER_ID] = {"balance": TEST_USER_BALANCE, "state": MAIN_MENU, "prev_state": MAIN_MENU}
+    def to_dict(self):
+        return {
+            'user_id': self.user_id,
+            'balance': self.balance,
+            'state': self.state,
+            'prev_state': self.prev_state
+        }
 
-# Your wallet address
-WALLET_ADDRESS = "0x3A035f8B7215fEb5c68c74665Fbaf9255681A8FB"
+class Database:
+    def __init__(self, db_file: str):
+        self.conn = sqlite3.connect(db_file)
+        self.create_table()
 
-# Start command handler
+    def create_table(self):
+        with self.conn:
+            self.conn.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    user_id INTEGER PRIMARY KEY,
+                    balance REAL NOT NULL,
+                    state TEXT NOT NULL,
+                    prev_state TEXT
+                )
+            ''')
+
+    def get_user(self, user_id: int) -> Optional[User]:
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
+        row = cursor.fetchone()
+        if row:
+            return User(user_id=row[0], balance=row[1], state=row[2], prev_state=row[3])
+        return None
+
+    def save_user(self, user: User):
+        with self.conn:
+            self.conn.execute('''
+                INSERT OR REPLACE INTO users (user_id, balance, state, prev_state)
+                VALUES (?, ?, ?, ?)
+            ''', (user.user_id, user.balance, user.state, user.prev_state))
+
+database = Database(DATABASE_FILE)
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.message.from_user.id
-    user_first_name = update.message.from_user.first_name  # Get the user's first name
+    user_first_name = update.message.from_user.first_name
 
-    if user_id not in users:
-        users[user_id] = {"balance": 0, "state": MAIN_MENU, "prev_state": MAIN_MENU}  # Initialize user with a balance of 0 dollars
+    user = database.get_user(user_id)
+    if not user:
+        user = User(user_id=user_id, balance=0.0, state=MAIN_MENU)
+        database.save_user(user)
 
     keyboard = [
         [InlineKeyboardButton("💰 Check Balance", callback_data='balance')],
@@ -47,33 +91,37 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         [InlineKeyboardButton("📤 Withdraw Crypto", callback_data='withdraw')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    # Personalized greeting message
+
     await update.message.reply_text(
         f'*Welcome to the Casino Bot, {user_first_name}!*\n\n_What would you like to do?_', 
         reply_markup=reply_markup, 
         parse_mode="Markdown"
     )
 
-# Callback handler for button presses
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     user_id = query.from_user.id
 
     await query.answer()
 
-    # Handle user state and callback data
+    user = database.get_user(user_id)
+    if not user:
+        await query.edit_message_text("User data not found.")
+        return
+
+    prev_state = user.state
     if query.data == 'balance':
-        users[user_id]["prev_state"] = users[user_id]["state"]
-        users[user_id]["state"] = 'balance'
-        balance = users.get(user_id, {}).get("balance", 0)
+        user.state = 'balance'
+        database.save_user(user)
+        balance = user.balance
         keyboard = [[InlineKeyboardButton("⬅️ Back", callback_data='back')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(text=f"💰 *Your current balance is:* _${balance}_", reply_markup=reply_markup, parse_mode="Markdown")
 
     elif query.data == 'dice':
-        users[user_id]["prev_state"] = users[user_id]["state"]
-        users[user_id]["state"] = CHOOSE_OPPONENT
+        user.prev_state = prev_state
+        user.state = CHOOSE_OPPONENT
+        database.save_user(user)
         keyboard = [
             [InlineKeyboardButton("🤖 Play with Bot", callback_data='play_with_bot')],
             [InlineKeyboardButton("👤 Play with Another User", callback_data='play_with_user')],
@@ -83,101 +131,100 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await query.edit_message_text(text="🎲 *How would you like to play?*", reply_markup=reply_markup, parse_mode="Markdown")
 
     elif query.data == 'deposit':
-        users[user_id]["prev_state"] = users[user_id]["state"]
-        users[user_id]["state"] = DEPOSIT
+        user.prev_state = prev_state
+        user.state = DEPOSIT
+        database.save_user(user)
         keyboard = [[InlineKeyboardButton("⬅️ Back", callback_data='back')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(text=f"💸 *Please send the amount you want to deposit.*\n_Your deposit address is:_ `{WALLET_ADDRESS}`", reply_markup=reply_markup, parse_mode="Markdown")
-    
+
     elif query.data == 'withdraw':
-        users[user_id]["prev_state"] = users[user_id]["state"]
-        users[user_id]["state"] = WITHDRAW
+        user.prev_state = prev_state
+        user.state = WITHDRAW
+        database.save_user(user)
         keyboard = [[InlineKeyboardButton("⬅️ Back", callback_data='back')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(text="📤 *Please enter the amount you want to withdraw:*", reply_markup=reply_markup, parse_mode="Markdown")
 
     elif query.data == 'play_with_bot':
-        users[user_id]["prev_state"] = CHOOSE_OPPONENT
-        users[user_id]["state"] = DICE_GAME
+        user.prev_state = CHOOSE_OPPONENT
+        user.state = DICE_GAME
+        database.save_user(user)
         await query.edit_message_text(text="🎲 *Please enter the amount you want to bet:*", parse_mode="Markdown")
 
     elif query.data == 'play_with_user':
-        # Handle playing with another user (implementation needed)
         await query.edit_message_text(text="👤 *Playing with another user is not yet implemented.*", parse_mode="Markdown")
 
     elif query.data == 'cancel':
-        users[user_id]["state"] = MAIN_MENU
+        user.state = MAIN_MENU
+        database.save_user(user)
         await start(update, context)  # Go back to the main menu
 
     elif query.data == 'back':
-        prev_state = users[user_id].get("prev_state", MAIN_MENU)
-        if prev_state == MAIN_MENU:
+        if user.prev_state == MAIN_MENU:
             await start(update, context)  # Go back to the main menu
+        elif user.prev_state == 'balance':
+            await button(update, context)  # Re-show balance
+        elif user.prev_state == DEPOSIT:
+            keyboard = [[InlineKeyboardButton("⬅️ Back", callback_data='back')]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(text=f"💸 *Please send the amount you want to deposit.*\n_Your deposit address is:_ `{WALLET_ADDRESS}`", reply_markup=reply_markup, parse_mode="Markdown")
+        elif user.prev_state == WITHDRAW:
+            keyboard = [[InlineKeyboardButton("⬅️ Back", callback_data='back')]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(text="📤 *Please enter the amount you want to withdraw:*", reply_markup=reply_markup, parse_mode="Markdown")
+        elif user.prev_state == CHOOSE_OPPONENT:
+            keyboard = [
+                [InlineKeyboardButton("🤖 Play with Bot", callback_data='play_with_bot')],
+                [InlineKeyboardButton("👤 Play with Another User", callback_data='play_with_user')],
+                [InlineKeyboardButton("🚫 Cancel", callback_data='cancel')]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(text="🎲 *How would you like to play?*", reply_markup=reply_markup, parse_mode="Markdown")
         else:
-            users[user_id]["state"] = prev_state
-            # Redraw the previous state message
-            if prev_state == DEPOSIT:
-                keyboard = [[InlineKeyboardButton("⬅️ Back", callback_data='back')]]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                await query.edit_message_text(text=f"💸 *Please send the amount you want to deposit.*\n_Your deposit address is:_ `{WALLET_ADDRESS}`", reply_markup=reply_markup, parse_mode="Markdown")
-            elif prev_state == WITHDRAW:
-                keyboard = [[InlineKeyboardButton("⬅️ Back", callback_data='back')]]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                await query.edit_message_text(text="📤 *Please enter the amount you want to withdraw:*", reply_markup=reply_markup, parse_mode="Markdown")
-            elif prev_state == CHOOSE_OPPONENT:
-                keyboard = [
-                    [InlineKeyboardButton("🤖 Play with Bot", callback_data='play_with_bot')],
-                    [InlineKeyboardButton("👤 Play with Another User", callback_data='play_with_user')],
-                    [InlineKeyboardButton("🚫 Cancel", callback_data='cancel')]
-                ]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                await query.edit_message_text(text="🎲 *How would you like to play?*", reply_markup=reply_markup, parse_mode="Markdown")
-            elif prev_state == 'balance':
-                await button(update, context)  # Re-show balance
-            else:
-                await start(update, context)  # Default to main menu if previous state is unknown
+            await start(update, context)  # Default to main menu if previous state is unknown
 
-# Handler for processing bets, deposits, and withdrawals
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.message.from_user.id
     user_message = update.message.text
 
-    if user_id not in users:
+    user = database.get_user(user_id)
+    if not user:
         await update.message.reply_text("Please start the bot with /start")
         return
 
-    user_state = users[user_id].get("state", MAIN_MENU)
-
-    if user_state == DEPOSIT:
+    if user.state == DEPOSIT:
         try:
             deposit_amount = float(user_message)
             if deposit_amount <= 0:
                 await update.message.reply_text("❗️ Deposit amount must be greater than zero.")
                 return
-            users[user_id]["balance"] += deposit_amount
-            users[user_id]["state"] = MAIN_MENU
-            await update.message.reply_text(f"💸 *You have successfully deposited ${deposit_amount}.*\n💰 *Your new balance is ${users[user_id]['balance']}.*")
+            user.balance += deposit_amount
+            user.state = MAIN_MENU
+            database.save_user(user)
+            await update.message.reply_text(f"💸 *You have successfully deposited ${deposit_amount}.*\n💰 *Your new balance is ${user.balance}.*")
         except ValueError:
             await update.message.reply_text("❗️ Please enter a valid amount.")
         return
 
-    if user_state == WITHDRAW:
+    if user.state == WITHDRAW:
         try:
             withdraw_amount = float(user_message)
             if withdraw_amount <= 0:
                 await update.message.reply_text("❗️ Withdrawal amount must be greater than zero.")
                 return
-            if withdraw_amount > users[user_id]["balance"]:
+            if withdraw_amount > user.balance:
                 await update.message.reply_text("🚫 You don't have enough balance to withdraw this amount.")
                 return
-            users[user_id]["balance"] -= withdraw_amount
-            users[user_id]["state"] = MAIN_MENU
-            await update.message.reply_text(f"📤 *You have successfully withdrawn ${withdraw_amount}.*\n💰 *Your new balance is ${users[user_id]['balance']}.*")
+            user.balance -= withdraw_amount
+            user.state = MAIN_MENU
+            database.save_user(user)
+            await update.message.reply_text(f"📤 *You have successfully withdrawn ${withdraw_amount}.*\n💰 *Your new balance is ${user.balance}.*")
         except ValueError:
             await update.message.reply_text("❗️ Please enter a valid amount.")
         return
 
-    if user_state == DICE_GAME:
+    if user.state == DICE_GAME:
         if not user_message.isdigit():
             await update.message.reply_text("❗️ Please enter a valid number for your bet.")
             return
@@ -188,12 +235,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await update.message.reply_text("❗️ Bet amount must be greater than zero.")
             return
 
-        if bet_amount > users[user_id]["balance"]:
+        if bet_amount > user.balance:
             await update.message.reply_text("🚫 You don't have enough balance to place this bet.")
             return
 
         # Send the dice animation
-        dice_message = await update.message.reply_dice()  # Sends animated dice
+        dice_message = await update.message.reply_dice()
 
         # Simulate dice roll (1-6)
         roll = random.randint(1, 6)
@@ -202,16 +249,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await asyncio.sleep(2)
 
         if roll > 3:
-            users[user_id]["balance"] += bet_amount  # Win: double the bet amount
-            result = f"🎉 *You rolled a {roll}!*\n_You win ${bet_amount}!_\n💰 *Your new balance is ${users[user_id]['balance']}.*"
+            user.balance += bet_amount
+            result = f"🎉 *You rolled a {roll}!*\n_You win ${bet_amount}!_\n💰 *Your new balance is ${user.balance}.*"
         else:
-            users[user_id]["balance"] -= bet_amount  # Lose: subtract the bet amount
-            result = f"😢 *You rolled a {roll}.*\n_You lose ${bet_amount}._\n💰 *Your new balance is ${users[user_id]['balance']}.*"
+            user.balance -= bet_amount
+            result = f"😢 *You rolled a {roll}.*\n_You lose ${bet_amount}._\n💰 *Your new balance is ${user.balance}.*"
 
         await dice_message.edit_text(result, parse_mode="Markdown")
-        users[user_id]["state"] = MAIN_MENU
+        user.state = MAIN_MENU
+        database.save_user(user)
 
-# Main function to start the bot
 def main() -> None:
     # Initialize the application with the bot token
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
