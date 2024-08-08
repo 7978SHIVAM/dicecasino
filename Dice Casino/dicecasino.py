@@ -1,6 +1,3 @@
-To send only the 🎲 emoji without additional text, you need to update the dice rolling part of the code. Here’s the updated `dicecasino.py` script with just the 🎲 emoji sent for rolling the dice:
-
-### Updated Code to Send Only the Dice Emoji
 
 ```python
 import os
