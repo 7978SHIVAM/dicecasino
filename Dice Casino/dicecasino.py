@@ -1,3 +1,8 @@
+To send only the 🎲 emoji without additional text, you need to update the dice rolling part of the code. Here’s the updated `dicecasino.py` script with just the 🎲 emoji sent for rolling the dice:
+
+### Updated Code to Send Only the Dice Emoji
+
+```python
 import os
 import asyncio
 from dotenv import load_dotenv
@@ -145,7 +150,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             return
 
         # Send rolling dice emoji and wait
-        message = await update.message.reply_text("🎲 *Rolling the dice...*")
+        message = await update.message.reply_text("🎲")  # Only the emoji
         await asyncio.sleep(2)  # Wait for 2 seconds
 
         # Simulate dice roll (1-6)
@@ -176,3 +181,10 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+```
+
+### Explanation:
+- **Sending Only the Dice Emoji**: In the `DICE_GAME` section, the bot now sends only the 🎲 emoji to indicate the dice is rolling.
+- **Animation Simulation**: The bot waits for 2 seconds to simulate the dice rolling animation before sending the result.
+
+Deploy this updated script to your hosting environment to see the changes in action.
