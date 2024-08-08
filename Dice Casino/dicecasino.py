@@ -13,16 +13,18 @@ TELEGRAM_BOT_TOKEN = "7000894405:AAF6FS6vQlNE6vmZ1pSFkZw9TgmhYA8AmYw"
 
 # In-memory user data (use a database for production)
 users = {}
+games = {}  # Track ongoing games
 
 # Constants for user state
 MAIN_MENU = 'main_menu'
 DEPOSIT = 'deposit'
 WITHDRAW = 'withdraw'
 DICE_GAME = 'dice_game'
+CHOOSE_OPPONENT = 'choose_opponent'
 
 # Define your test user ID and balance here
 TEST_USER_ID = 6764153691
-TEST_USER_BALANCE = 54325  # Amount in dollars
+TEST_USER_BALANCE = 2635  # Amount in dollars
 
 # Initialize the user with a specific balance for testing
 users[TEST_USER_ID] = {"balance": TEST_USER_BALANCE, "state": MAIN_MENU}
@@ -36,7 +38,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_first_name = update.message.from_user.first_name  # Get the user's first name
 
     if user_id not in users:
-        users[user_id] = {"balance": 0, "state": MAIN_MENU}  # Initialize user with a balance of 0 units
+        users[user_id] = {"balance": 0, "state": MAIN_MENU}  # Initialize user with a balance of 0 dollars
 
     keyboard = [
         [InlineKeyboardButton("💰 Check Balance", callback_data='balance')],
@@ -65,13 +67,17 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         balance = users.get(user_id, {}).get("balance", 0)
         keyboard = [[InlineKeyboardButton("⬅️ Back", callback_data='back')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(text=f"💰 *Your current balance is:* _{balance} units_", reply_markup=reply_markup, parse_mode="Markdown")
+        await query.edit_message_text(text=f"💰 *Your current balance is:* _${balance}_", reply_markup=reply_markup, parse_mode="Markdown")
 
     elif query.data == 'dice':
-        users[user_id]["state"] = DICE_GAME
-        keyboard = [[InlineKeyboardButton("⬅️ Back", callback_data='back')]]
+        users[user_id]["state"] = CHOOSE_OPPONENT
+        keyboard = [
+            [InlineKeyboardButton("🤖 Play with Bot", callback_data='play_with_bot')],
+            [InlineKeyboardButton("👤 Play with Another User", callback_data='play_with_user')],
+            [InlineKeyboardButton("🚫 Cancel", callback_data='cancel')]
+        ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(text="🎲 *Please enter the amount you want to bet:*", reply_markup=reply_markup, parse_mode="Markdown")
+        await query.edit_message_text(text="🎲 *How would you like to play?*", reply_markup=reply_markup, parse_mode="Markdown")
 
     elif query.data == 'deposit':
         users[user_id]["state"] = DEPOSIT
@@ -85,9 +91,26 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(text="📤 *Please enter the amount you want to withdraw:*", reply_markup=reply_markup, parse_mode="Markdown")
 
-    elif query.data == 'back':
+    elif query.data == 'play_with_bot':
+        users[user_id]["state"] = DICE_GAME
+        await query.edit_message_text(text="🎲 *Please enter the amount you want to bet:*", parse_mode="Markdown")
+
+    elif query.data == 'play_with_user':
+        # Handle playing with another user (implementation needed)
+        await query.edit_message_text(text="👤 *Playing with another user is not yet implemented.*", parse_mode="Markdown")
+
+    elif query.data == 'cancel':
         users[user_id]["state"] = MAIN_MENU
         await start(update, context)  # Go back to the main menu
+
+    elif query.data == 'back':
+        previous_state = users[user_id]["state"]
+        if previous_state == DICE_GAME:
+            users[user_id]["state"] = CHOOSE_OPPONENT
+            await button(update, context)  # Re-show the choice of opponent
+        else:
+            users[user_id]["state"] = MAIN_MENU
+            await start(update, context)  # Go back to the main menu
 
 # Handler for processing bets, deposits, and withdrawals
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -108,7 +131,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 return
             users[user_id]["balance"] += deposit_amount
             users[user_id]["state"] = MAIN_MENU
-            await update.message.reply_text(f"💸 *You have successfully deposited {deposit_amount} units.*\n💰 *Your new balance is {users[user_id]['balance']} units.*")
+            await update.message.reply_text(f"💸 *You have successfully deposited ${deposit_amount}.*\n💰 *Your new balance is ${users[user_id]['balance']}.*")
         except ValueError:
             await update.message.reply_text("❗️ Please enter a valid amount.")
         return
@@ -124,7 +147,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 return
             users[user_id]["balance"] -= withdraw_amount
             users[user_id]["state"] = MAIN_MENU
-            await update.message.reply_text(f"📤 *You have successfully withdrawn {withdraw_amount} units.*\n💰 *Your new balance is {users[user_id]['balance']} units.*")
+            await update.message.reply_text(f"📤 *You have successfully withdrawn ${withdraw_amount}.*\n💰 *Your new balance is ${users[user_id]['balance']}.*")
         except ValueError:
             await update.message.reply_text("❗️ Please enter a valid amount.")
         return
@@ -155,10 +178,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
         if roll > 3:
             users[user_id]["balance"] += bet_amount  # Win: double the bet amount
-            result = f"🎉 *You rolled a {roll}!*\n_You win {bet_amount} units!_\n💰 *Your new balance is {users[user_id]['balance']} units.*"
+            result = f"🎉 *You rolled a {roll}!*\n_You win ${bet_amount}!_\n💰 *Your new balance is ${users[user_id]['balance']}.*"
         else:
             users[user_id]["balance"] -= bet_amount  # Lose: subtract the bet amount
-            result = f"😢 *You rolled a {roll}.*\n_You lose {bet_amount} units._\n💰 *Your new balance is {users[user_id]['balance']} units.*"
+            result = f"😢 *You rolled a {roll}.*\n_You lose ${bet_amount}._\n💰 *Your new balance is ${users[user_id]['balance']}.*"
 
         await dice_message.edit_text(result, parse_mode="Markdown")
         users[user_id]["state"] = MAIN_MENU
