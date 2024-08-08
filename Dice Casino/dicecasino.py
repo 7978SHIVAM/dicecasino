@@ -1,7 +1,7 @@
 import os
 import asyncio
 from dotenv import load_dotenv
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Dice
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 import random
 
@@ -9,7 +9,7 @@ import random
 load_dotenv()
 
 # Telegram bot token
-TELEGRAM_BOT_TOKEN = "7000894405:AAFR_Yi4ljLldytaNPHB4p88NkU2-xLFXeE"
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 # In-memory user data (use a database for production)
 users = {}
@@ -24,7 +24,7 @@ CHOOSE_OPPONENT = 'choose_opponent'
 
 # Define your test user ID and balance here
 TEST_USER_ID = 6764153691
-TEST_USER_BALANCE = 26356  # Amount in dollars
+TEST_USER_BALANCE = 2635  # Amount in dollars
 
 # Initialize the user with a specific balance for testing
 users[TEST_USER_ID] = {"balance": TEST_USER_BALANCE, "state": MAIN_MENU}
@@ -187,7 +187,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         users[user_id]["state"] = MAIN_MENU
 
 # Main function to start the bot
-def main() -> None:
+async def main() -> None:
     # Initialize the application with the bot token
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
@@ -197,7 +197,7 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # Start the bot
-    application.run_polling()
+    await application.run_polling()
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())
