@@ -27,6 +27,9 @@ TEST_USER_BALANCE = 2635  # Amount in dollars
 # Initialize the user with a specific balance for testing
 users[TEST_USER_ID] = {"balance": TEST_USER_BALANCE, "state": MAIN_MENU}
 
+# Your wallet address
+WALLET_ADDRESS = "0x3A035f8B7215fEb5c68c74665Fbaf9255681A8FB"
+
 # Start command handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.message.from_user.id
@@ -74,7 +77,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         users[user_id]["state"] = DEPOSIT
         keyboard = [[InlineKeyboardButton("⬅️ Back", callback_data='back')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(text="💸 *Please send the amount you want to deposit.*\n_Your deposit address is:_ `0x3A035f8B7215fEb5c68c74665Fbaf9255681A8FB`", reply_markup=reply_markup, parse_mode="Markdown")
+        await query.edit_message_text(text=f"💸 *Please send the amount you want to deposit.*\n_Your deposit address is:_ `{WALLET_ADDRESS}`", reply_markup=reply_markup, parse_mode="Markdown")
     
     elif query.data == 'withdraw':
         users[user_id]["state"] = WITHDRAW
