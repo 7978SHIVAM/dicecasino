@@ -9,7 +9,7 @@ import random
 load_dotenv()
 
 # Telegram bot token
-TELEGRAM_BOT_TOKEN = "7000894405:AAF6FS6vQlNE6vmZ1pSFkZw9TgmhYA8AmYw"
+TELEGRAM_BOT_TOKEN = "7000894405:AAFR_Yi4ljLldytaNPHB4p88NkU2-xLFXeE"
 
 # In-memory user data (use a database for production)
 users = {}
