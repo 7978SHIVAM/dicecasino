@@ -21,6 +21,8 @@ DEPOSIT = 'deposit'
 WITHDRAW = 'withdraw'
 DICE_GAME = 'dice_game'
 CHOOSE_OPPONENT = 'choose_opponent'
+BET_AMOUNT = 'bet_amount'
+ROUND_SELECTION = 'round_selection'
 
 # Define your test user ID and balance here
 TEST_USER_ID = 6764153691
@@ -62,7 +64,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     await query.answer()
 
-    # Handle user state and callback data
     if query.data == 'balance':
         balance = users.get(user_id, {}).get("balance", 0)
         keyboard = [[InlineKeyboardButton("⬅️ Back", callback_data='back')]]
@@ -70,14 +71,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await query.edit_message_text(text=f"💰 *Your current balance is:* _${balance}_", reply_markup=reply_markup, parse_mode="Markdown")
 
     elif query.data == 'dice':
-        users[user_id]["state"] = CHOOSE_OPPONENT
-        keyboard = [
-            [InlineKeyboardButton("🤖 Play with Bot", callback_data='play_with_bot')],
-            [InlineKeyboardButton("👤 Play with Another User", callback_data='play_with_user')],
-            [InlineKeyboardButton("🚫 Cancel", callback_data='cancel')]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(text="🎲 *How would you like to play?*", reply_markup=reply_markup, parse_mode="Markdown")
+        users[user_id]["state"] = BET_AMOUNT
+        await query.edit_message_text(text="🎲 *How much would you like to bet?* (Enter the amount)", parse_mode="Markdown")
 
     elif query.data == 'deposit':
         users[user_id]["state"] = DEPOSIT
@@ -92,8 +87,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await query.edit_message_text(text="📤 *Please enter the amount you want to withdraw:*", reply_markup=reply_markup, parse_mode="Markdown")
 
     elif query.data == 'play_with_bot':
-        users[user_id]["state"] = DICE_GAME
-        await query.edit_message_text(text="🎲 *Please enter the amount you want to bet:*", parse_mode="Markdown")
+        users[user_id]["state"] = ROUND_SELECTION
+        await query.edit_message_text(text="🎲 *How many rounds would you like to play? (Max 3)*", parse_mode="Markdown")
 
     elif query.data == 'play_with_user':
         # Handle playing with another user (implementation needed)
@@ -122,6 +117,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     user_state = users[user_id].get("state", MAIN_MENU)
+
+    if user_state == BET_AMOUNT:
+        try:
+            bet_amount = float(user_message)
+            if bet_amount <= 0:
+                await update.message.reply_text("❗️ Bet amount must be greater than zero.")
+                return
+            if bet_amount > users[user_id]["balance"]:
+                await update.message.reply_text("🚫 You don't have enough balance to place this bet.")
+                return
+
+            users[user_id]["state"] = CHOOSE_OPPONENT
+            games[user_id] = {"bet_amount": bet_amount, "rounds": 0, "user_score": 0, "bot_score": 0}
+
+            keyboard = [
+                [InlineKeyboardButton("🤖 Play with Bot", callback_data='play_with_bot')],
+                [InlineKeyboardButton("👤 Play with Another User", callback_data='play_with_user')],
+                [InlineKeyboardButton("🚫 Cancel", callback_data='cancel')]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text(text="🎲 *How would you like to play?*", reply_markup=reply_markup, parse_mode="Markdown")
+
+        except ValueError:
+            await update.message.reply_text("❗️ Please enter a valid amount.")
+        return
 
     if user_state == DEPOSIT:
         try:
@@ -152,52 +172,63 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await update.message.reply_text("❗️ Please enter a valid amount.")
         return
 
+    if user_state == ROUND_SELECTION:
+        try:
+            rounds = int(user_message)
+            if rounds <= 0 or rounds > 3:
+                await update.message.reply_text("❗️ Number of rounds must be between 1 and 3.")
+                return
+            games[user_id]["rounds"] = rounds
+            users[user_id]["state"] = DICE_GAME
+            await update.message.reply_text("🎲 *You will roll first. Send /roll to roll the dice.*", parse_mode="Markdown")
+        except ValueError:
+            await update.message.reply_text("❗️ Please enter a valid number of rounds.")
+        return
+
     if user_state == DICE_GAME:
-        if not user_message.isdigit():
-            await update.message.reply_text("❗️ Please enter a valid number for your bet.")
-            return
+        if user_message == '/roll':
+            if user_id not in games or games[user_id]["rounds"] <= 0:
+                await update.message.reply_text("❗️ Please start a game first by choosing the number of rounds.")
+                return
 
-        bet_amount = int(user_message)
+            # User rolls the dice
+            user_roll = random.randint(1, 6)
+            games[user_id]["user_score"] += user_roll
 
-        if bet_amount <= 0:
-            await update.message.reply_text("❗️ Bet amount must be greater than zero.")
-            return
+            # Bot rolls the dice
+            bot_roll = random.randint(1, 6)
+            games[user_id]["bot_score"] += bot_roll
 
-        if bet_amount > users[user_id]["balance"]:
-            await update.message.reply_text("🚫 You don't have enough balance to place this bet.")
-            return
+            # Calculate the results
+            rounds_left = games[user_id]["rounds"] - 1
+            games[user_id]["rounds"] = rounds_left
 
-        # Send the dice animation
-        dice_message = await update.message.reply_dice()  # Sends animated dice
+            if rounds_left > 0:
+                await update.message.reply_text(f"🎲 *You rolled:* {user_roll}\n🤖 *Bot rolled:* {bot_roll}\n\n*Rounds left:* {rounds_left}\n\nSend /roll again to continue.")
+            else:
+                user_score = games[user_id]["user_score"]
+                bot_score = games[user_id]["bot_score"]
 
-        # Simulate dice roll (1-6)
-        roll = random.randint(1, 6)
+                if user_score > bot_score:
+                    result_text = f"🎉 *Congratulations!* You win with a score of {user_score} against the bot's {bot_score}."
+                elif user_score < bot_score:
+                    result_text = f"😢 *You lost.* The bot wins with a score of {bot_score} against your {user_score}."
+                else:
+                    result_text = f"🤝 *It's a tie!* Both you and the bot scored {user_score}."
 
-        # Wait for the dice animation to complete
-        await asyncio.sleep(2)
+                del games[user_id]  # End the game
 
-        if roll > 3:
-            users[user_id]["balance"] += bet_amount  # Win: double the bet amount
-            result = f"🎉 *You rolled a {roll}!*\n_You win ${bet_amount}!_\n💰 *Your new balance is ${users[user_id]['balance']}.*"
-        else:
-            users[user_id]["balance"] -= bet_amount  # Lose: subtract the bet amount
-            result = f"😢 *You rolled a {roll}.*\n_You lose ${bet_amount}._\n💰 *Your new balance is ${users[user_id]['balance']}.*"
+                await update.message.reply_text(result_text, parse_mode="Markdown")
+        return
 
-        await dice_message.edit_text(result, parse_mode="Markdown")
-        users[user_id]["state"] = MAIN_MENU
-
-# Main function to start the bot
-def main() -> None:
-    # Initialize the application with the bot token
+async def main() -> None:
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
-    # Add handlers for start command, button presses, and betting
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CallbackQueryHandler(button))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    application.add_handler(CallbackQueryHandler(button))
 
-    # Start the bot
-    application.run_polling()
+    await application.run_polling()
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())
