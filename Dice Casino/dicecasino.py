@@ -1,7 +1,7 @@
 import os
 import asyncio
 from dotenv import load_dotenv
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Dice
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 import random
 
@@ -144,12 +144,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await update.message.reply_text("🚫 You don't have enough balance to place this bet.")
             return
 
-        # Send rolling dice emoji and wait
-        message = await update.message.reply_text("🎲")  # Only the emoji
-        await asyncio.sleep(2)  # Wait for 2 seconds
+        # Send the dice animation
+        dice_message = await update.message.reply_dice()  # Sends animated dice
 
         # Simulate dice roll (1-6)
         roll = random.randint(1, 6)
+
+        # Wait for the dice animation to complete
+        await asyncio.sleep(2)
 
         if roll > 3:
             users[user_id]["balance"] += bet_amount  # Win: double the bet amount
@@ -158,7 +160,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             users[user_id]["balance"] -= bet_amount  # Lose: subtract the bet amount
             result = f"😢 *You rolled a {roll}.*\n_You lose {bet_amount} units._\n💰 *Your new balance is {users[user_id]['balance']} units.*"
 
-        await message.edit_text(result, parse_mode="Markdown")
+        await dice_message.edit_text(result, parse_mode="Markdown")
         users[user_id]["state"] = MAIN_MENU
 
 # Main function to start the bot
